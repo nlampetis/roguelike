@@ -2,6 +2,7 @@
 #include <cmath>
 #include <iostream>
 #include <random>
+#include <thread>
 #include <vector>
 #include <SDL3/SDL_render.h>
 #include <SDL3_image/SDL_image.h>
@@ -33,6 +34,10 @@ constexpr int WINDOW_HEIGHT = TILE_HEIGHT * TILES_WINDOW_HEIGHT;
 // title
 constexpr std::string WINDOW_TITLE = "Roguelike";
 
+// rng
+auto seed = std::random_device()();
+std::default_random_engine generator (seed);
+std::uniform_int_distribution distribution(0,3);
 
 bool init() {
     // init
@@ -201,27 +206,8 @@ void draw(const Drawable &drawable) {
     SDL_RenderTexture(renderer, drawable.get_texture(), &source_f_rect, &dest_f_rect);
 }
 
-int main() {
 
-    // initialize SDL
-    if (!init()) {
-        exit(-1);
-    }
-
-    // rng for world creation
-    const auto seed = std::random_device()();
-    std::cout << "Generated seed: " << seed << std::endl;
-    std::default_random_engine generator (seed);
-    std::uniform_int_distribution distribution(0,3);
-
-    // load textures
-    SDL_Texture *player_texture = load_texture("../assets/images/player_symbol_tiled.png");
-    SDL_Texture * lands_tileset_texture = load_texture("../assets/images/lands_32.png");
-
-    // create the player
-    Player p {32, 32};
-    p.set_texture(player_texture);
-
+std::vector<Tile> generate_normal_distribution_map(SDL_Texture * lands_tileset_texture) {
 
     // generate the map
     std::vector<Tile> map;
@@ -251,6 +237,113 @@ int main() {
         }
     }
 
+    return map;
+}
+
+
+void render_sub_rects(const SDL_FRect r) {
+
+    const int x = static_cast<int> (r.x);
+    const int y = static_cast<int> (r.y);
+    const int w = static_cast<int> (r.w);
+    const int h = static_cast<int> (r.h);
+
+    const int mult = 7;
+
+    constexpr int min_width_to_draw = WINDOW_WIDTH /  (mult + 1);
+    constexpr int min_height_to_draw = WINDOW_HEIGHT / (mult + 1);
+
+    constexpr int min_width_to_subdivide = WINDOW_WIDTH / mult;
+    constexpr int min_height_to_subdivide = WINDOW_HEIGHT / mult;
+
+
+    if (w < min_width_to_draw || h < min_height_to_draw) {
+        return;
+    }
+    if (w < min_width_to_subdivide || h < min_height_to_subdivide ) {
+        const auto current_area = static_cast<Uint8>(w) % 255;
+        SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
+        SDL_RenderFillRect(renderer, &r);
+        SDL_SetRenderDrawColor(renderer, 0, 0 , 0, 255);
+        SDL_RenderRect(renderer, &r);
+        return;
+    }
+
+    std::random_device rd;  // a seed source for the random number engine
+    std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
+    std::uniform_int_distribution how_to_split (0, 1);
+
+    SDL_FRect left_division;
+    SDL_FRect right_division;
+
+
+    if (how_to_split(gen) == 0) {
+
+        const int lower_bound = w/4;
+        const int upper_bound = w - lower_bound;
+
+        std::uniform_int_distribution where_to_split(lower_bound, upper_bound);
+        const int split_point = where_to_split(gen);
+        // const int split_point = w/2;
+
+        left_division = {
+            static_cast<float>(x),
+            static_cast<float>(y),
+            static_cast<float>(split_point),
+            static_cast<float>(h)
+        };
+
+        right_division = {
+            static_cast<float>(x + split_point),
+            static_cast<float>(y),
+            static_cast<float>(w - split_point),
+            static_cast<float>(h)
+        };
+
+    } else {
+        const int lower_bound = h/4;
+        const int upper_bound = h - lower_bound;
+
+        std::uniform_int_distribution where_to_split(lower_bound, upper_bound);
+        const int split_point = where_to_split(gen);
+        // const int split_point = h/2;
+
+        left_division = {
+            static_cast<float>(x),
+            static_cast<float>(y),
+            static_cast<float>(w),
+            static_cast<float>(split_point)
+        };
+
+        right_division = {
+            static_cast<float>(x),
+            static_cast<float>(y + split_point),
+            static_cast<float>(w),
+            static_cast<float>(h - split_point)
+        };
+    }
+
+    render_sub_rects(left_division);
+    render_sub_rects(right_division);
+
+}
+
+int main() {
+
+    // initialize SDL
+    if (!init()) {
+        exit(-1);
+    }
+
+    // load textures
+    SDL_Texture *player_texture = load_texture("../assets/images/player_symbol_tiled.png");
+    SDL_Texture * lands_tileset_texture = load_texture("../assets/images/lands_32.png");
+
+    // create the player
+    Player p {32, 32};
+    p.set_texture(player_texture);
+
+
     // frame rate and quit variables
     uint64_t previous_ticks = SDL_GetTicks();
     bool quit = false;
@@ -263,22 +356,25 @@ int main() {
         const uint64_t delta = now - previous_ticks;
         previous_ticks = now;
 
+
+        // clear the screen before drawing anything
+        SDL_SetRenderDrawColor(renderer, 1, 2, 3, 255);
+        SDL_RenderClear(renderer);
+
         // event handling
         quit = handle_events(p);
 
-        // game logic
-        p.blink(delta);
+         // game logic
+         p.blink(delta);
 
-        // render world
-        std::ranges::for_each(map, [](const auto & t) {draw(t);});
 
-        // render player
-        draw(p);
+         // render player
+         draw(p);
 
-        // draw fps
-        draw_fps(delta);
+         // draw fps
+         draw_fps(delta);
 
-        //present to the screen
+        // present to the screen
         SDL_RenderPresent(renderer);
     }
 

@@ -18,6 +18,7 @@ class Tile final : public Drawable {
     bool _hidden;
     bool _passable;
 public:
+    Tile();
     Tile(int x, int y);
     ~Tile() override;
 
@@ -31,7 +32,11 @@ public:
 
     [[nodiscard]] bool is_passable() const;
 
+    void set_passable(bool passable);
+
     void set_texture(SDL_Texture * tex);
+
+    void set_position(int x, int y);
 
     void set_type(TileType t);
 };

@@ -7,6 +7,7 @@
 #include <SDL3/SDL_render.h>
 #include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
+#include <spdlog/spdlog.h>
 
 #include "player.h"
 #include "tile.h"
@@ -173,7 +174,12 @@ void draw_message(const std::string & message, const SDL_Color color, const floa
 
 void draw_fps(const uint64_t delta) {
     const float fps = 1000 / static_cast<float>(delta);
-    draw_message(std::to_string(static_cast<int>(std::floor(fps))), {0,0,0,255}, WINDOW_WIDTH - 10 - 32*3, 50);
+    draw_message(
+            std::to_string( static_cast<int>(std::floor(fps))),
+            {0,0,0,255},
+            WINDOW_WIDTH - 10 - 32*3,
+            50
+        );
 }
 
 
@@ -206,6 +212,52 @@ void draw(const Drawable &drawable) {
     SDL_RenderTexture(renderer, drawable.get_texture(), &source_f_rect, &dest_f_rect);
 }
 
+
+std::vector<TileRect> generate_space_partition_map_tiles(TileRect tr) {
+    constexpr auto split_threshold_w = 15;
+    constexpr auto split_threshold_h = 15;
+
+    constexpr auto min_w = split_threshold_w /2;
+    constexpr auto min_h = split_threshold_h /2;
+
+    if (tr.h < min_h | tr.w < min_w) {
+        return {};
+    }
+
+    if (tr.h <= split_threshold_h & tr.w <= split_threshold_w) {
+        return {tr};
+    }
+
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution how_to_split (0, 1);
+
+    const bool is_vertical_split = how_to_split(gen);
+    // if (tr.h <= split_threshold_h)
+
+    std::vector<TileRect> a {};
+    std::vector<TileRect> b {};
+
+    if (is_vertical_split) {
+
+        std::uniform_int_distribution where_to_split (tr.w/4, 3*tr.w/4);
+        const auto split_point = where_to_split(gen);
+
+        a = generate_space_partition_map_tiles( {tr.x, tr.y, split_point, tr.h} );
+        b = generate_space_partition_map_tiles({tr.x + split_point, tr.y, tr.w - split_point, tr.h});
+    } else {
+
+        std::uniform_int_distribution where_to_split (tr.h/4, 3*tr.h/4);
+        const auto split_point = where_to_split(gen);
+
+        a = generate_space_partition_map_tiles({tr.x, tr.y, tr.w, split_point});
+        b = generate_space_partition_map_tiles({tr.x, tr.y + split_point, tr.w, tr.h - split_point});
+    }
+
+    a.insert(a.end(), b.begin(), b.end());
+    return a;
+}
 
 std::vector<Tile> generate_normal_distribution_map(SDL_Texture * lands_tileset_texture) {
 
@@ -241,93 +293,6 @@ std::vector<Tile> generate_normal_distribution_map(SDL_Texture * lands_tileset_t
 }
 
 
-void render_sub_rects(const SDL_FRect r) {
-
-    const int x = static_cast<int> (r.x);
-    const int y = static_cast<int> (r.y);
-    const int w = static_cast<int> (r.w);
-    const int h = static_cast<int> (r.h);
-
-    const int mult = 7;
-
-    constexpr int min_width_to_draw = WINDOW_WIDTH /  (mult + 1);
-    constexpr int min_height_to_draw = WINDOW_HEIGHT / (mult + 1);
-
-    constexpr int min_width_to_subdivide = WINDOW_WIDTH / mult;
-    constexpr int min_height_to_subdivide = WINDOW_HEIGHT / mult;
-
-
-    if (w < min_width_to_draw || h < min_height_to_draw) {
-        return;
-    }
-    if (w < min_width_to_subdivide || h < min_height_to_subdivide ) {
-        const auto current_area = static_cast<Uint8>(w) % 255;
-        SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
-        SDL_RenderFillRect(renderer, &r);
-        SDL_SetRenderDrawColor(renderer, 0, 0 , 0, 255);
-        SDL_RenderRect(renderer, &r);
-        return;
-    }
-
-    std::random_device rd;  // a seed source for the random number engine
-    std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
-    std::uniform_int_distribution how_to_split (0, 1);
-
-    SDL_FRect left_division;
-    SDL_FRect right_division;
-
-
-    if (how_to_split(gen) == 0) {
-
-        const int lower_bound = w/4;
-        const int upper_bound = w - lower_bound;
-
-        std::uniform_int_distribution where_to_split(lower_bound, upper_bound);
-        const int split_point = where_to_split(gen);
-        // const int split_point = w/2;
-
-        left_division = {
-            static_cast<float>(x),
-            static_cast<float>(y),
-            static_cast<float>(split_point),
-            static_cast<float>(h)
-        };
-
-        right_division = {
-            static_cast<float>(x + split_point),
-            static_cast<float>(y),
-            static_cast<float>(w - split_point),
-            static_cast<float>(h)
-        };
-
-    } else {
-        const int lower_bound = h/4;
-        const int upper_bound = h - lower_bound;
-
-        std::uniform_int_distribution where_to_split(lower_bound, upper_bound);
-        const int split_point = where_to_split(gen);
-        // const int split_point = h/2;
-
-        left_division = {
-            static_cast<float>(x),
-            static_cast<float>(y),
-            static_cast<float>(w),
-            static_cast<float>(split_point)
-        };
-
-        right_division = {
-            static_cast<float>(x),
-            static_cast<float>(y + split_point),
-            static_cast<float>(w),
-            static_cast<float>(h - split_point)
-        };
-    }
-
-    render_sub_rects(left_division);
-    render_sub_rects(right_division);
-
-}
-
 int main() {
 
     // initialize SDL
@@ -348,6 +313,51 @@ int main() {
     uint64_t previous_ticks = SDL_GetTicks();
     bool quit = false;
 
+
+    constexpr TileRect tr {0, 0, TILES_WINDOW_WIDTH, TILES_WINDOW_HEIGHT};
+
+    std::vector<TileRect> rects = generate_space_partition_map_tiles(tr);
+    constexpr auto padding = 1;
+    for (auto &[x, y, w, h] : rects) {
+        x += padding;
+        y += padding;
+        w -= 2 * padding;
+        h -= 2 * padding;
+    }
+
+
+    std::array<Tile, TILES_WINDOW_HEIGHT * TILES_WINDOW_WIDTH> map = {};
+
+    for (const auto &[x, y, w, h] : rects ) {
+        for (int i = x; i < x + w; ++i) {
+            for (int j = y; j < y + h; ++j) {
+                Tile t {i, j};
+                t.set_texture(lands_tileset_texture);
+                if (i == x | i == x + w - 1 | j == y | j == y + h - 1) {
+                    t.set_type(Mountain);
+                    t.set_passable(false);
+                } else {
+                    t.set_type(Plains);
+                    t.set_passable(true);
+                }
+                map.at(i*TILES_WINDOW_HEIGHT+j) = t;
+            }
+        }
+    }
+
+    for (int i = 0; i < TILES_WINDOW_HEIGHT; ++i) {
+        for (int j = 0; j < TILES_WINDOW_WIDTH; ++j) {
+            auto & current_tile = map.at(j * TILES_WINDOW_HEIGHT + i);
+            if (current_tile.get_texture() == nullptr) {
+                current_tile.set_texture(lands_tileset_texture);
+                current_tile.set_position(j, i);
+                current_tile.set_type(Sky);
+                current_tile.set_passable(true);
+            }
+        }
+    }
+
+
     // main loop start
     while (!quit) {
 
@@ -361,6 +371,10 @@ int main() {
         SDL_SetRenderDrawColor(renderer, 1, 2, 3, 255);
         SDL_RenderClear(renderer);
 
+        for (const auto &t : map) {
+            draw(t);
+        }
+
         // event handling
         quit = handle_events(p);
 
@@ -372,12 +386,11 @@ int main() {
          draw(p);
 
          // draw fps
-         draw_fps(delta);
+         // draw_fps(delta);
 
         // present to the screen
         SDL_RenderPresent(renderer);
     }
-
 
     cleanup();
     return 0;

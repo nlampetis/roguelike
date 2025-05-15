@@ -6,6 +6,8 @@ set(CMAKE_CXX_STANDARD 20)
 find_package(SDL3 REQUIRED)
 find_package(SDL3_image REQUIRED)
 find_package(SDL3_ttf REQUIRED)
+find_package(spdlog REQUIRED)
+
 include_directories(roguelike ${SDL3_INCLUDE_DIRS})
 include_directories(roguelike ${SDL3_IMAGE_INCLUDE_DIRS})
 include_directories(roguelike ${SDL3_TTF_INCLUDE_DIRS})
@@ -28,9 +30,11 @@ add_executable(roguelike src/main.cpp
         src/tile.cpp
         src/tile.h
         src/utils.h)
+
 target_link_libraries(roguelike ${SDL3_LIBRARIES})
 target_link_libraries(roguelike SDL3_image::SDL3_image)
 target_link_libraries(roguelike SDL3_ttf)
+target_link_libraries(roguelike spdlog::spdlog)
 
 enable_testing()
 

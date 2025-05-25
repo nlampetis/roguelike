@@ -35,13 +35,30 @@ void level::generate_level() {
         }
     }
 
+    // std::random_device rd;
+    // std::mt19937 gen(rd());
+
     for (const auto &[x, y, w, h]: rects) {
+
+        // std::uniform_int_distribution wall_for_door(0, 3);
+        // if (wall_for_door(gen) )
+        // std::
+
+
+
         for (int i = x; i < x + w; ++i) {
             for (int j = y; j < y + h; ++j) {
                 Tile t{i, j};
                 if (i == x | i == x + w - 1 | j == y | j == y + h - 1) {
-                    t.set_type(Mountain);
-                    t.set_passable(false);
+                    const int middle_point = x + w/2;
+                    if (j == y + h -1 && i == middle_point) {
+                        t.set_type(Plains);
+                        t.set_passable(true);
+                    }
+                    else {
+                        t.set_type(Mountain);
+                        t.set_passable(false);
+                    }
                 } else {
                     t.set_type(Plains);
                     t.set_passable(true);

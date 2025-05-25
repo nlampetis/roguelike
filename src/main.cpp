@@ -113,35 +113,33 @@ void cleanup() {
 }
 
 
-bool handle_events(Player &player) {
+
+std::unordered_map<SDL_Keycode, GameEvent> keymap =
+{
+    {SDLK_K, MOVE_UP},
+    {SDLK_J, MOVE_DOWN},
+    {SDLK_H, MOVE_LEFT},
+    {SDLK_L, MOVE_RIGHT},
+    {SDLK_Q, QUIT},
+
+};
+
+GameEvent handle_events() {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
             case SDL_EVENT_QUIT:
-                return true;
+                return QUIT;
             case SDL_EVENT_KEY_DOWN:
-                switch (event.key.key) {
-                    case SDLK_Q:
-                        return true;
-                    case SDLK_W:
-                        player.move(UP);
-                        break;
-                    case SDLK_A:
-                        player.move(LEFT);
-                        break;
-                    case SDLK_S:
-                        player.move(DOWN);
-                        break;
-                    case SDLK_D:
-                        player.move(RIGHT);
-                        break;
-                    default: break;
+                if (keymap.contains(event.key.key)) {
+                    return keymap.at(event.key.key);
                 }
+                break;
             default:
                 break;
         }
     }
-    return false;
+    return NONE;
 }
 
 
@@ -261,17 +259,22 @@ int main() {
         SDL_SetRenderDrawColor(renderer, 1, 2, 3, 255);
         SDL_RenderClear(renderer);
 
-        for (const auto &t : lv.get_tilemap()) {
-            draw(t);
-        }
 
         // event handling
-        quit = handle_events(p);
+        const auto current_event = handle_events();
+        if (current_event == QUIT) quit = true;
 
-        lv.update(delta);
 
-         // render player
-         draw(p);
+        lv.update(delta, current_event);
+
+
+        // render all
+        for (const auto t : lv.get_tilemap()) {
+            for (const auto &t1 : t) {
+                draw(t1);
+            }
+        }
+        draw(*lv.get_player());
 
         // present to the screen
         SDL_RenderPresent(renderer);

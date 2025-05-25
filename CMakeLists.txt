@@ -22,14 +22,17 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 # test related end
 
-add_executable(roguelike src/main.cpp
+add_executable(
+        roguelike src/main.cpp
         src/player.cpp
         src/player.h
         src/drawable.h
-        src/game_object.h
         src/tile.cpp
         src/tile.h
-        src/utils.h)
+        src/utils.h
+        src/level.h
+        src/level.cpp
+)
 
 target_link_libraries(roguelike ${SDL3_LIBRARIES})
 target_link_libraries(roguelike SDL3_image::SDL3_image)

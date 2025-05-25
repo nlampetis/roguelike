@@ -9,6 +9,7 @@
 #include <SDL3_ttf/SDL_ttf.h>
 #include <spdlog/spdlog.h>
 
+#include "level.h"
 #include "player.h"
 #include "tile.h"
 
@@ -35,6 +36,9 @@ constexpr int WINDOW_HEIGHT = TILE_HEIGHT * TILES_WINDOW_HEIGHT;
 // title
 constexpr std::string WINDOW_TITLE = "Roguelike";
 
+
+SDL_Texture * player_texture;
+SDL_Texture * lands_tileset_texture;
 // rng
 auto seed = std::random_device()();
 std::default_random_engine generator (seed);
@@ -187,6 +191,15 @@ void draw_fps(const uint64_t delta) {
 // are the same as the tileset tile dimensions
 void draw(const Drawable &drawable) {
 
+    SDL_Texture * current_tex = nullptr;
+    switch (drawable.texture_type()) {
+        case PLAYER:
+            current_tex = player_texture;
+            break;
+        case TERRAIN:
+            current_tex = lands_tileset_texture;
+            break;
+    }
     const SDL_Rect source_rect  {
         drawable.get_texture_coords().x * TILE_WIDTH,
         drawable.get_texture_coords().y * TILE_HEIGHT,
@@ -201,7 +214,7 @@ void draw(const Drawable &drawable) {
         TILE_HEIGHT
     };
 
-    SDL_SetTextureAlphaMod(drawable.get_texture(), drawable.is_hidden() ? 0 : 255);
+    SDL_SetTextureAlphaMod(current_tex, drawable.is_hidden() ? 0 : 255);
 
 
     SDL_FRect source_f_rect;
@@ -209,87 +222,7 @@ void draw(const Drawable &drawable) {
 
     SDL_RectToFRect(&source_rect, &source_f_rect);
     SDL_RectToFRect(&dest_rect, &dest_f_rect);
-    SDL_RenderTexture(renderer, drawable.get_texture(), &source_f_rect, &dest_f_rect);
-}
-
-
-std::vector<TileRect> generate_space_partition_map_tiles(TileRect tr) {
-    constexpr auto split_threshold_w = 15;
-    constexpr auto split_threshold_h = 15;
-
-    constexpr auto min_w = split_threshold_w /2;
-    constexpr auto min_h = split_threshold_h /2;
-
-    if (tr.h < min_h | tr.w < min_w) {
-        return {};
-    }
-
-    if (tr.h <= split_threshold_h & tr.w <= split_threshold_w) {
-        return {tr};
-    }
-
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution how_to_split (0, 1);
-
-    const bool is_vertical_split = how_to_split(gen);
-    // if (tr.h <= split_threshold_h)
-
-    std::vector<TileRect> a {};
-    std::vector<TileRect> b {};
-
-    if (is_vertical_split) {
-
-        std::uniform_int_distribution where_to_split (tr.w/4, 3*tr.w/4);
-        const auto split_point = where_to_split(gen);
-
-        a = generate_space_partition_map_tiles( {tr.x, tr.y, split_point, tr.h} );
-        b = generate_space_partition_map_tiles({tr.x + split_point, tr.y, tr.w - split_point, tr.h});
-    } else {
-
-        std::uniform_int_distribution where_to_split (tr.h/4, 3*tr.h/4);
-        const auto split_point = where_to_split(gen);
-
-        a = generate_space_partition_map_tiles({tr.x, tr.y, tr.w, split_point});
-        b = generate_space_partition_map_tiles({tr.x, tr.y + split_point, tr.w, tr.h - split_point});
-    }
-
-    a.insert(a.end(), b.begin(), b.end());
-    return a;
-}
-
-std::vector<Tile> generate_normal_distribution_map(SDL_Texture * lands_tileset_texture) {
-
-    // generate the map
-    std::vector<Tile> map;
-    for (int i = 0; i < TILES_WINDOW_WIDTH; ++i) {
-        for (int j = 0; j < TILES_WINDOW_HEIGHT; ++j) {
-            const int dice_roll = distribution(generator);
-            Tile t {i, j};
-            t.set_texture(lands_tileset_texture);
-            switch (dice_roll) {
-                case 0:
-                    t.set_type(Mountain);
-                    break;
-                case 1:
-                    t.set_type(Sky);
-                    break;
-                case 2:
-                    t.set_type(Plains);
-                    break;
-                case 3:
-                    t.set_type(Forest);
-                    break;
-                default:
-                    break;
-
-            }
-            map.push_back(t);
-        }
-    }
-
-    return map;
+    SDL_RenderTexture(renderer, current_tex, &source_f_rect, &dest_f_rect);
 }
 
 
@@ -301,61 +234,18 @@ int main() {
     }
 
     // load textures
-    SDL_Texture *player_texture = load_texture("../assets/images/player_symbol_tiled.png");
-    SDL_Texture * lands_tileset_texture = load_texture("../assets/images/lands_32.png");
+    player_texture = load_texture("../assets/images/player_symbol_tiled.png");
+    lands_tileset_texture = load_texture("../assets/images/lands_32.png");
 
     // create the player
     Player p {32, 32};
-    p.set_texture(player_texture);
 
+    level lv {TILES_WINDOW_WIDTH, TILES_WINDOW_HEIGHT, &p};
+    lv.generate_level();
 
     // frame rate and quit variables
     uint64_t previous_ticks = SDL_GetTicks();
     bool quit = false;
-
-
-    constexpr TileRect tr {0, 0, TILES_WINDOW_WIDTH, TILES_WINDOW_HEIGHT};
-
-    std::vector<TileRect> rects = generate_space_partition_map_tiles(tr);
-    constexpr auto padding = 1;
-    for (auto &[x, y, w, h] : rects) {
-        x += padding;
-        y += padding;
-        w -= 2 * padding;
-        h -= 2 * padding;
-    }
-
-
-    std::array<Tile, TILES_WINDOW_HEIGHT * TILES_WINDOW_WIDTH> map = {};
-
-    for (const auto &[x, y, w, h] : rects ) {
-        for (int i = x; i < x + w; ++i) {
-            for (int j = y; j < y + h; ++j) {
-                Tile t {i, j};
-                t.set_texture(lands_tileset_texture);
-                if (i == x | i == x + w - 1 | j == y | j == y + h - 1) {
-                    t.set_type(Mountain);
-                    t.set_passable(false);
-                } else {
-                    t.set_type(Plains);
-                    t.set_passable(true);
-                }
-                map.at(i*TILES_WINDOW_HEIGHT+j) = t;
-            }
-        }
-    }
-
-    for (int i = 0; i < TILES_WINDOW_HEIGHT; ++i) {
-        for (int j = 0; j < TILES_WINDOW_WIDTH; ++j) {
-            auto & current_tile = map.at(j * TILES_WINDOW_HEIGHT + i);
-            if (current_tile.get_texture() == nullptr) {
-                current_tile.set_texture(lands_tileset_texture);
-                current_tile.set_position(j, i);
-                current_tile.set_type(Sky);
-                current_tile.set_passable(true);
-            }
-        }
-    }
 
 
     // main loop start
@@ -371,22 +261,17 @@ int main() {
         SDL_SetRenderDrawColor(renderer, 1, 2, 3, 255);
         SDL_RenderClear(renderer);
 
-        for (const auto &t : map) {
+        for (const auto &t : lv.get_tilemap()) {
             draw(t);
         }
 
         // event handling
         quit = handle_events(p);
 
-         // game logic
-         p.blink(delta);
-
+        lv.update(delta);
 
          // render player
          draw(p);
-
-         // draw fps
-         // draw_fps(delta);
 
         // present to the screen
         SDL_RenderPresent(renderer);

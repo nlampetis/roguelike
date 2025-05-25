@@ -1,17 +1,18 @@
 #include "tile.h"
 
-Tile::Tile() : _tex(nullptr), _type(Plains), _x(0), _y(0), _hidden(false), _passable(true) {
+Tile::Tile() : _type(Plains), _x(0), _y(0), _hidden(false), _passable(true) {
 }
 
 Tile::Tile(const int x,const int y):
-_tex(nullptr), _type(Plains), _x(x), _y(y), _hidden(false), _passable(true) {
+_type(Plains), _x(x), _y(y), _hidden(false), _passable(true) {
 }
 
 Tile::~Tile() = default;
 
-SDL_Texture * Tile::get_texture() const {
-    return _tex;
+TextureSheet Tile::texture_type() const {
+    return TERRAIN;
 }
+
 
 Vector2D_Int Tile::get_texture_coords() const {
     return map_type_to_texture_coords(_type);
@@ -27,10 +28,6 @@ bool Tile::is_hidden() const {
 
 bool Tile::is_passable() const {
     return _passable;
-}
-
-void Tile::set_texture(SDL_Texture *tex) {
-    _tex = tex;
 }
 
 void Tile::set_type(const TileType t) {

@@ -3,12 +3,7 @@
 Player::Player(const int x, const int y)
 : _tile_pos_x(x), _tile_pos_y(y) {}
 
-Player::~Player() {
-    SDL_DestroyTexture(_texture);
-}
-void Player::set_texture(SDL_Texture * texture) {
-    _texture = texture;
-}
+Player::~Player() { }
 
 void Player::move(const Direction d) {
     unhide();
@@ -54,9 +49,10 @@ bool Player::is_hidden() const {
     return _hidden;
 }
 
-SDL_Texture * Player::get_texture() const {
-    return _texture;
+TextureSheet Player::texture_type() const {
+    return PLAYER;
 }
+
 
 Vector2D_Int Player::get_destination_coords() const {
     return { _tile_pos_x, _tile_pos_y};
